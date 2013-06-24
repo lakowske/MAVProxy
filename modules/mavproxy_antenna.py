@@ -50,21 +50,28 @@ def unload():
 def mavlink_packet(m):
     '''handle an incoming mavlink packet'''
     state = mpstate.antenna_state
+    #If ground control station location is not set and waypoints exist, then
+    #set the ground control station location to the first waypoint
     if state.gcs_location is None and mpstate.status.wploader.count() > 0:
         home = mpstate.status.wploader.wp(0)
         mpstate.antenna_state.gcs_location = (home.x, home.y)
         print("Antenna home set")
+    #Bail out if the ground control station location is not set
     if state.gcs_location is None:
         return
+    #If this is a GPS_RAW mavlink packet, then determine the bearing to the plane
     if m.get_type() == 'GPS_RAW' and state.gcs_location is not None:
         (gcs_lat, gcs_lon) = state.gcs_location
         bearing = cuav_util.gps_bearing(gcs_lat, gcs_lon, m.lat, m.lon)
+    #If this is a GPS_RAW_INT mavlink packet, then determine the bearing to the plane        
     elif m.get_type() == 'GPS_RAW_INT' and state.gcs_location is not None:
         (gcs_lat, gcs_lon) = state.gcs_location
         bearing = cuav_util.gps_bearing(gcs_lat, gcs_lon, m.lat/1.0e7, m.lon/1.0e7)
     else:
         return
     mpstate.console.set_status('Antenna', 'Antenna %.0f' % bearing, row=0)
+    #If the bearing is different by 5 degrees and 15 seconds have elapsed, then
+    #mention the antenna bearing.
     if abs(bearing - state.last_bearing) > 5 and (time.time() - state.last_announce) > 15:
         state.last_bearing = bearing
         state.last_announce = time.time()
